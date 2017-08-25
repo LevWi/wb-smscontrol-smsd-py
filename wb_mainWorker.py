@@ -4,7 +4,7 @@ import time
 
 import mosquitto
 import serial
-# import modbus_tk.defines as mdef
+import modbus_tk
 from modbus_tk import modbus_rtu
 
 import process_signals
@@ -14,14 +14,14 @@ import sms_storage
 #logger = modbus_tk.utils.create_logger(name="console", record_format="%(message)s")
 
 #Инициализация для wirenboard 5
-rs485_mdbPort = modbus_rtu.RtuMaster(serial.Serial('/dev/ttyAPP2', baudrate=9600, parity = serial.PARITY_NONE , stopbits = serial.STOPBITS_ONE , timeout=1.3))
+rs485_mdbPort = modbus_rtu.RtuMaster(serial.Serial('/dev/ttyAPP2', baudrate=9600, parity = serial.PARITY_NONE , stopbits = serial.STOPBITS_ONE , timeout=1.5))
 #master.set_timeout(1.3)
 rs485_mdbPort.set_verbose(True)
 
 process_signals.dev_PLC.portMaster = rs485_mdbPort
 process_signals.dev_VentSystem.portMaster = rs485_mdbPort
 
-ser_port_thread = ser_port_worker.SerialPortThread(0.05)
+ser_port_thread = ser_port_worker.SerialPortThread(0.2)
 
 #=================================================
 # Конфигурирование опроса по Modbus
@@ -117,7 +117,7 @@ mqttc.connect("localhost", 1883, 60)
 
 #подписываемся к сигналам
 #Только к управляемым сигналам
-mqttc.subscribe([signal.mqttlink for signal in process_signals.Signals.group if
+mqttc.subscribe([(signal.mqttlink, 0) for signal in process_signals.Signals.group if
                  (len(signal.mqttlink) > 0 and len(signal.smsNameIn) > 0) or signal is process_signals.sig_ReceivedSMS])
 #===========================================
 
@@ -216,6 +216,7 @@ def sendSMSwithInterval(message, number):
 #Публикация неуправляющих переменных
 def publicSignal(signal):
     assert isinstance(signal, process_signals.Signals)
+    print('Public message: {} = {}'.format(signal.mqttlink , signal.mqttData))
     try:
         mqttc.publish(signal.mqttlink, signal.mqttData)
     except:
@@ -229,23 +230,26 @@ for signal in process_signals.Signals.group:
 if __name__ == "__main__":
     mqttc.loop_start()
     phonelist = sms_storage.readphones_from_file()
+    ser_port_thread.start()
     while 1:
         #Отправка SMS после истечения интервала в sendSMSAnswerBanTON при приходе нового события on_message
         if sendSMSAnswerBanTON.OUT:
-            number, smsCommand = None, None
-            try:
-                number, smsCommand = process_signals.sig_ReceivedSMS.data.split('**', 1)
-            except ValueError:
-                print('WrongFormat for "sig_ReceivedSMS.data" , value = {}'
-                      .format(process_signals.sig_ReceivedSMS.data))
-            if number is not None:
-                if len(number) == 10:
-                    number = '+7' + number
-                if smsCommand in ['refresh_data', 'status_need']:
-                    message = createSmsAnswer()
-                    sendSMSwithInterval(message, number)
-                elif smsCommand == 'bad_format':
-                    sendSMSwithInterval('Неверный формат сообщения', number)
+            if len(process_signals.sig_ReceivedSMS.data) > 1:
+                number, smsCommand = None, None
+                try:
+                    number, smsCommand = process_signals.sig_ReceivedSMS.data.split('**', 1)
+                except ValueError:
+                    print('WrongFormat for "sig_ReceivedSMS.data" , value = {}'
+                          .format(process_signals.sig_ReceivedSMS.data))
+                if number is not None:
+                    if len(number) == 10:
+                        number = '+7' + number
+                    if smsCommand in ['refresh_data', 'status_need']:
+                        message = createSmsAnswer()
+                        sendSMSwithInterval(message, number)
+                    elif smsCommand == 'bad_format':
+                        sendSMSwithInterval('Неверный формат сообщения', number)
+                process_signals.sig_ReceivedSMS.data = ''
         #Рассылка SMS по авариям
         for al in [alarmIndoorTemp, alarmTempBoilersLine]:
             assert isinstance(al, Alarm)

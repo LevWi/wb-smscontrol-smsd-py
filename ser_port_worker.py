@@ -40,7 +40,7 @@ class SerialPortThread(threading.Thread):
                 callFunction(act)
             else:
                 if len(self.listSignCycleRead) > 0:
-                    if 0 > index > len(self.listSignCycleRead) - 1:
+                    if index > (len(self.listSignCycleRead) - 1):
                         index = 0
                     neda = self.listSignCycleRead[index]
                     index += 1

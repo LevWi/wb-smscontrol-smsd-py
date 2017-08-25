@@ -31,7 +31,7 @@ class Signals(object):
         self._data = None
         self.OnChangedData = None
         self.max, self.min = additional.get("max"), additional.get("min")
-        self.mqttlink = ToUnicodeAll(additional.get('mqttlink'))
+        self.mqttlink = str(ToUnicodeAll(additional.get('mqttlink')))
         self.smsNameIn = ToUnicodeAll(additional.get('smsNameIn'))
         self.smsNameOut = ToUnicodeAll(additional.get('smsNameOut'))
         mdbAddr_ = additional.get('mdbAddr')
@@ -138,13 +138,13 @@ def isSmsNamesMatches(str1, names):
                 return True
     return False
 
-def ToUnicodeAll(argument) :
+def ToUnicodeAll(argument):
     t = type(argument)
     if t is unicode:
         return argument
     if t is str:
         return argument.decode('utf8')
-    if t is None:
+    if argument is None:
         return u''
     if t is list:
         l = []
@@ -251,7 +251,7 @@ sig_TempHeatingLine = Signals.NewSignalToGroup(
     "TempHeatingLine",
     "float",
     dev_PLC,
-    mqttlink="/devices/Sensors/controls/TempHeatingLine" ,
+    mqttlink="/devices/Sensors/controls/TempHeatingLine",
     mdbAddr=430,
     smsNameOut=u"Температура отопления"
                                           )
