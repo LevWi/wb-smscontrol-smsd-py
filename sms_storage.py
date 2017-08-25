@@ -85,13 +85,11 @@ def sendSms(message, tel):
     f.write(message)
     f.close()
 
-class UserPhone:
+class UserPhone(object):
     def __init__(self, rights, number):
         self.rights = rights
         self.number = number
-
-    fullnumber = property()
-    @fullnumber.getter
+    @property
     def fullnumber(self):
         return '+7' + self.number if len(self.number) == 10 else self.number
     @staticmethod

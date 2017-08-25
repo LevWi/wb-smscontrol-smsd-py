@@ -67,25 +67,34 @@ ser_port_thread.listSignCycleRead = [checkHeaterType, readAlarms] + [sign for si
 
 #Вспомогательный таймер на выключение
 class TON(object):
-    def __init__(self, interval=0):
+    def __init__(self, interval=0, itercount=None):
         self._startTime = 0
         self.interval = interval
         self._inWork = False
+        self.itercount = itercount
+        self.iter = 0
 
-    def restart(self, interval=None):
+    def restart(self, interval=None, restartIter=False):
         if interval is not None:
             self.interval = interval
         self._startTime = time.time()
         self._inWork = True
+        if self.itercount is not None and self.iter <= self.itercount:
+            self.iter += 1
+        if restartIter and self.itercount is not None:
+            self.iter = 0
+
 
     @property
     def OUT(self):
         if self._inWork:
             self._inWork = time.time() - self._startTime < self.interval
-        return not self._inWork
+        return not self._inWork and self.iter <= self.itercount
 
+#Блокирующие таймеры
 #Нужно немного выждать опрос всех устройств, прежде чем отправить ответ пользователю
 sendSMSAnswerBanTON = TON(5)
+sendAlarmsMessageTON = TON(60*30, 3)
 
 def on_message(mosq, obj, msg):
     for sign in process_signals.Signals.group:
@@ -144,13 +153,63 @@ def createSmsAnswer():
         smsAnswer += 'Ошибка связи с вентустановкой\n '
     return smsAnswer
 
+# Для переодического уведомления
+class Alarm(object):
+    def __init__(self, condition, mess, tonBlock=None ):
+        self.condition = condition
+        self.message = mess
+        self._ton = tonBlock
+        self.conditionOld = False
+
+    def readcondition(self):
+        res = self.condition()
+        if not res and isinstance(self._ton, TON):
+            self.restartTimer()
+        self.conditionOld = res
+        return res
+
+    @property
+    def messageStr(self):
+        if callable(self.message):
+            return self.message()
+        else:
+            return self.message
+
+    @property
+    def OUT(self):
+        res = self.readcondition()
+        if isinstance(self._ton, TON):
+            res = res and self._ton.OUT
+        return res
+
+    def blockAlarm(self):
+        if isinstance(self._ton, TON):
+            self._ton.restart()
+
+    def restartTimer(self):
+        if isinstance(self._ton, TON):
+            self._ton.restart(restartIter=True)
+
+alarmTempBoilersLine = Alarm(
+    lambda: process_signals.sig_TempBoilersLine.data >= 87.5,
+    lambda: '!!Внимание!! \nКритическая температура котлового контура: {}\xe2\x84\x83\n'
+            .format(process_signals.sig_TempBoilersLine.data),
+    TON(60*30, 3)
+)
+
+alarmIndoorTemp = Alarm(
+    lambda: process_signals.sig_TempIndoor.data < 6,
+    lambda: '!!Внимание!! \nНизкая температура помещения:: {}\xe2\x84\x83\n'
+            .format(process_signals.sig_TempIndoor.data),
+    TON(60*30, 3)
+)
+
+
 #чтобы избежать конфликтов с именем файлами замедлим создание
 # sms файлов
 def sendSMSwithInterval(message, number):
     sms_storage.sendSms(message, number)
     time.sleep(0.01)
-
-
 
 if __name__ == "__main__":
     mqttc.loop_start()
@@ -173,5 +232,12 @@ if __name__ == "__main__":
                 elif smsCommand == 'bad_format':
                     sendSMSwithInterval('Неверный формат сообщения', number)
         #Рассылка SMS по авариям
-
+        for al in [alarmIndoorTemp, alarmTempBoilersLine]:
+            assert isinstance(al, Alarm)
+            if al.OUT:
+                for user in phonelist:
+                    assert isinstance(user, sms_storage.UserPhone)
+                    if 'admin' in user.rights:
+                        sendSMSwithInterval(al.message, user.fullnumber)
+                        al.blockAlarm()
         time.sleep(0.05)

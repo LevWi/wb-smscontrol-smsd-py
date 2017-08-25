@@ -115,7 +115,7 @@ def ParseSMS(stri):
     return answer
 
 def msg_on_web_serv(msg):
-    mqttc.publish( signalsDB.sig_ReceivedSMS.mqttlink, msg)
+    mqttc.publish(signalsDB.sig_ReceivedSMS.mqttlink, msg)
 
 def public_topic_on_web_serv(mqttlink, topic):
     try:
