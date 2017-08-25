@@ -191,14 +191,14 @@ class Alarm(object):
             self._ton.restart(restartIter=True)
 
 alarmTempBoilersLine = Alarm(
-    lambda: process_signals.sig_TempBoilersLine.data >= 87.5,
+    lambda: process_signals.sig_TempBoilersLine.data >= 87.5 ,
     lambda: '!!Внимание!! \nКритическая температура котлового контура: {}\xe2\x84\x83\n'
             .format(process_signals.sig_TempBoilersLine.data),
     TON(60*30, 3)
 )
 
 alarmIndoorTemp = Alarm(
-    lambda: process_signals.sig_TempIndoor.data < 6,
+    lambda: -50 < process_signals.sig_TempIndoor.data < 6,
     lambda: '!!Внимание!! \nНизкая температура помещения:: {}\xe2\x84\x83\n'
             .format(process_signals.sig_TempIndoor.data),
     TON(60*30, 3)
