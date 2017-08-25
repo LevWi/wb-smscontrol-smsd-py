@@ -12,7 +12,9 @@ import ser_port_worker
 import sms_storage
 
 #logger = modbus_tk.utils.create_logger(name="console", record_format="%(message)s")
-rs485_mdbPort = modbus_rtu.RtuMaster(serial.Serial('/dev/ttyNSC0', baudrate=9600, parity = serial.PARITY_NONE , stopbits = serial.STOPBITS_ONE , timeout=1.3))
+
+#Инициализация для wirenboard 5
+rs485_mdbPort = modbus_rtu.RtuMaster(serial.Serial('/dev/ttyAPP2', baudrate=9600, parity = serial.PARITY_NONE , stopbits = serial.STOPBITS_ONE , timeout=1.3))
 #master.set_timeout(1.3)
 rs485_mdbPort.set_verbose(True)
 
@@ -55,6 +57,7 @@ def readBoilersInDI(*arg):
     if regPLC_DI is not None :
         process_signals.sig_PelletBoilerOn.data = regPLC_DI & 0b10 > 0
         process_signals.sig_DiselBoilerOn.data = regPLC_DI & 0b100 > 0
+
 # Действие будет выполняться при считывании дискретных входов
 process_signals.sig_PLC_DInputs.OnChangedData = readBoilersInDI
 
@@ -94,7 +97,6 @@ class TON(object):
 #Блокирующие таймеры
 #Нужно немного выждать опрос всех устройств, прежде чем отправить ответ пользователю
 sendSMSAnswerBanTON = TON(5)
-sendAlarmsMessageTON = TON(60*30, 3)
 
 def on_message(mosq, obj, msg):
     for sign in process_signals.Signals.group:
@@ -210,6 +212,19 @@ alarmIndoorTemp = Alarm(
 def sendSMSwithInterval(message, number):
     sms_storage.sendSms(message, number)
     time.sleep(0.01)
+
+#Публикация неуправляющих переменных
+def publicSignal(signal):
+    assert isinstance(signal, process_signals.Signals)
+    try:
+        mqttc.publish(signal.mqttlink, signal.mqttData)
+    except:
+        print 'Error public topic'
+
+for signal in process_signals.Signals.group:
+    assert isinstance(signal, process_signals.Signals)
+    if len(signal.mqttlink) > 0 and signal.canModbusWork and signal.smsNameIn == '':
+        signal.OnChangedData = publicSignal
 
 if __name__ == "__main__":
     mqttc.loop_start()
