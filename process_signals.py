@@ -25,7 +25,7 @@ class Signals(object):
         """
         if type not in ('bool','float', 'int', 'str') :
                 raise ValueError("Wrong parametr 'type'  - need 'float' , 'int', 'str'")
-        self.__useLimits = type  in ( 'float', 'int')
+        self.__useLimits = type in ('float', 'int')
         self.name = str(name)
         self.type = type
         self._data = None
@@ -34,6 +34,7 @@ class Signals(object):
         self.mqttlink = str(ToUnicodeAll(additional.get('mqttlink')))
         self.smsNameIn = ToUnicodeAll(additional.get('smsNameIn'))
         self.smsNameOut = ToUnicodeAll(additional.get('smsNameOut'))
+        self.smsOutPostfix = ToUnicodeAll(additional.get('smsOutPostfix'))
         self.convertFunc = additional.get('convertFunc')
         mdbAddr_ = additional.get('mdbAddr')
         self.mdbDev = mdbdev
@@ -76,14 +77,17 @@ class Signals(object):
         if self.canModbusWork:
             self.mdbDev.ReadSignalFromDev(self)
             if not self.mdbDev.lostDev:
+                print('<-- read from device {} = {}'.format(self.name, self.data))
                 return self.data
         return None
 
     def wrtSignalToDev(self, newVal, refreshSignal = False):
         if self.canModbusWork:
+            print('--> try to write command {} = {}'.format(self.name, newVal))
             self.mdbDev.wrtSignalToDev(self, newVal, refreshSignal)
             if not self.mdbDev.lostDev:
                 return self.data
+        print('xx--> error to write command {} = {}'.format(self.name, newVal))
         return None
 
     @property
@@ -118,13 +122,13 @@ class Signals(object):
             return value
 
     @staticmethod
-    def NewSignalToGroup(name, type, mdbDev=None, **additional):
-        obj = Signals(name, type, mdbDev,  **additional)
+    def NewSignalToGroup(name, typ, mdbDev=None, **additional):
+        obj = Signals(name, typ, mdbDev,  **additional)
         Signals.group.append(obj)
         return obj
 
 #Преобразование числа к дополнительному коду опредленной длины
-def twos_complement_convert(val , size=16):
+def twos_complement_convert(val, size=16):
     return ~(val ^ int('F' * (size / 4), 16)) if val >> size-1 else val
 
 
@@ -244,7 +248,9 @@ sig_PressureBoilersLine = Signals.NewSignalToGroup(
     mqttlink="/devices/mdb/Sensors/controls/PressureBoilersLine",
     mdbAddr=434,
     convertFunc=word_to_int,
-    smsNameOut="Давление в котлах"
+    smsNameOut="Давление в котлах",
+    smsOutPostfix='ед'
+
                                 )
 
 sig_TempBoilersLine = Signals.NewSignalToGroup(
@@ -254,7 +260,8 @@ sig_TempBoilersLine = Signals.NewSignalToGroup(
     mqttlink="/devices/mdb/Sensors/controls/TempBoilersLine" ,
     mdbAddr=428,
     convertFunc=word_to_int,
-    smsNameOut=u"Температура котлов"
+    smsNameOut=u"Температура котлов",
+    smsOutPostfix='\xe2\x84\x83'
                                           )
 
 sig_TempHeatingLine = Signals.NewSignalToGroup(
@@ -264,7 +271,8 @@ sig_TempHeatingLine = Signals.NewSignalToGroup(
     mqttlink="/devices/mdb/Sensors/controls/TempHeatingLine",
     mdbAddr=430,
     convertFunc=word_to_int,
-    smsNameOut=u"Температура отопления"
+    smsNameOut=u"Температура отопления",
+    smsOutPostfix='\xe2\x84\x83'
                                           )
 
 sig_TempIndoor = Signals.NewSignalToGroup(
@@ -274,7 +282,8 @@ sig_TempIndoor = Signals.NewSignalToGroup(
     mqttlink="/devices/mdb/Sensors/controls/TempIndoor",
     mdbAddr=432,
     convertFunc=word_to_int,
-    smsNameOut="Температура помещения"
+    smsNameOut="Температура помещения",
+    smsOutPostfix='\xe2\x84\x83'
                                           )
 
 sig_IndoorTempSet = Signals.NewSignalToGroup(
@@ -285,7 +294,8 @@ sig_IndoorTempSet = Signals.NewSignalToGroup(
     mqttlink="/devices/mdb/Boilers/controls/TempSet",
     mdbAddr=335,
     smsNameIn=[u"Uctavka", 'уставка'],
-    smsNameOut=u"Уставка помещения"
+    smsNameOut=u"Уставка помещения",
+    smsOutPostfix='\xe2\x84\x83'
                                              )
 sig_PresenceMode = Signals.NewSignalToGroup(
     "PresenceMode",

@@ -57,8 +57,7 @@ class SerialPortThread(threading.Thread):
 
     # Добавляем действие на запись. Работает приоритетно
     def sendToQueue(self, act):
-        if callable(act) or type(act) is tuple:
-            self.queueWrite.put(act)
+        self.queueWrite.put(act)
 
     def readSignals(self):
         pass
@@ -68,6 +67,7 @@ class SerialPortThread(threading.Thread):
 # func1
 # [ func1 , *arg ]
 def callFunction(arg):
+    #print('call function {}'.format(arg))
     if callable(arg):
         arg()
     elif type(arg) is list:
@@ -79,4 +79,5 @@ def callFunction(arg):
                     func(*args)
                     return
                 func(args)
+                return
             func()
