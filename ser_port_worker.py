@@ -67,7 +67,7 @@ class SerialPortThread(threading.Thread):
 # func1
 # [ func1 , *arg ]
 def callFunction(arg):
-    #print('call function {}'.format(arg))
+    # print('call function {}'.format(arg))
     if callable(arg):
         arg()
     elif type(arg) is list:

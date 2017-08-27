@@ -14,12 +14,12 @@ ERROR_PATH = '/mnt/tmpfs-spool/gammu/error/'
 SENT_PATH = '/mnt/tmpfs-spool/gammu/sent/'
 PHONE_LIST = '/home/phones.txt'
 
+# Какой тип SMS будет посылаться устройством
 SEND_FALSH_SMS = True
 
-# PHONE_LIST = 'phones.txt'
 
-def filePath(parh):
-    return INBOX_PATH if INBOX_PATH.endswith('/') else INBOX_PATH + '/'
+def filePath(path):
+    return path if path.endswith('/') else path + '/'
 
 
 def dellAllFilesInDir(dirPath):
@@ -47,46 +47,9 @@ def readAllSms():
                 print('Wrong message file {}'.format(fileName))
         f.close()
         os.remove(flPth)
+    cleanSentPath()
     return arr
 
-
-# def sendSms(message, tel):
-#     tm = datetime.datetime.now()
-#     if type(message) is not unicode:
-#         message = message.decode('utf-8')
-#     message = message.encode('utf-16')
-#     namefile = 'OUT{}{:02d}{:02d}_{:02d}{:02d}{:02d}_00_{}_sms0.txt'.format(tm.year,
-#                                                                             tm.month,
-#                                                                             tm.day,
-#                                                                             tm.hour,
-#                                                                             tm.minute,
-#                                                                             tm.second,
-#                                                                             tel
-#                                                                             )
-#     f = open(OUTBOX_PATH + namefile, 'w')
-#     f.write(message)
-#     f.close()
-
-# MAX_SMS_LENGTH = 70
-# def sendSms(message, number):
-#      numsms=0
-#      if len(message)> MAX_SMS_LENGTH:
-#          mess = u''
-#          for part in message.split(u'\n'):
-#              if len(mess)+len(part) > MAX_SMS_LENGTH:
-#                  _send_(mess, number, numsms)
-#                  numsms +=1
-#                  message = message.replace(mess, u'', 1)
-#                  mess = part
-#              else:
-#                  mess = mess + u'\n' + part
-#      _send_(message, number, numsms)
-
-# def sendSms(message, number):
-#     num = len(message)
-#     numparts= num//MAX_SMS_LENGTH + 1 if num % MAX_SMS_LENGTH > 0 else 0
-#     for i in range(numparts):
-#         _send_(message[i*70: (i+1)*70+1], number, i)
 
 
 def sendSms(message, tel, flashSMS=SEND_FALSH_SMS):
