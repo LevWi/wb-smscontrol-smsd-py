@@ -14,6 +14,7 @@ def is_number(str):
     except ValueError:
         return False
 
+
 # def ParseSMS1(stri):
 #     answer = ''
 #     if stri == '0421043E043E043104490435043D0438043500200434043E0441044204300432043B0435043D043E':
@@ -54,7 +55,7 @@ def ParseSMS(stri):
         answer = 'reboot'
         return answer
     if stri == 'status':
-        #mqttc.publish(signalsDB.sig_ReceivedSMS.mqttlink, 'STATUS_NEED')
+        # mqttc.publish(signalsDB.sig_ReceivedSMS.mqttlink, 'STATUS_NEED')
         return 'status_need'
         '''
         if (devices.Alarms[2].find('loVen') >= 0):
@@ -89,7 +90,7 @@ def ParseSMS(stri):
         parValue = elems[1].strip(' ')
         for dev in signalsDB.Signals.group:
             assert isinstance(dev, signalsDB.Signals)
-            if signalsDB.isSmsNamesMatches( smsNamePar ,  dev.smsNameIn) :
+            if signalsDB.isSmsNamesMatches(smsNamePar, dev.smsNameIn):
                 try:
                     dev.data = parValue
                     public_topic_on_web_serv(dev.mqttlink, dev.mqttData)
@@ -114,8 +115,11 @@ def ParseSMS(stri):
                     #         mqttc.publish(dev[1] + '/on', "0")
     return answer
 
+
 def msg_on_web_serv(msg):
+    print('public SMS message = ' + msg)
     mqttc.publish(signalsDB.sig_ReceivedSMS.mqttlink, msg)
+
 
 def public_topic_on_web_serv(mqttlink, topic):
     try:
@@ -123,33 +127,31 @@ def public_topic_on_web_serv(mqttlink, topic):
     except:
         print 'Error public topic'
 
+
 if __name__ == "__main__":
-            mqttc = mosquitto.Mosquitto()
-            #mqttc.on_message = on_message
-            #mqttc.on_connect = on_connect
-            #mqttc.on_publish = on_publish
-            #mqttc.on_subscribe = on_subscribe
-            #mqttc.subscribe([(list[0][1], 0), (list[1][1], 0), (list[2][1], 0), (list[3][1], 0), (list[4][1], 0)])
-            #mqttc.loop_start()
-            phonelist = []
-            phonelist = sms_storage.readphones_from_file()
-            if len(phonelist) == 0:
-                    msg_on_web_serv('Phonelist wrong...')
-                    exit()
-            smsArr = sms_storage.readAllSms()
-            if len(smsArr) > 0 :
-                mqttc.connect("localhost", 1883, 60)
-                for sms_elem in smsArr :
-                    sms_str = sms_elem.get('message')
-                    number_str = sms_storage.UserPhone.FormatNumber(sms_elem.get('number'))
-                    if sms_str is not None and number_str is not None:
-                         for users in phonelist :
-                             if number_str in users.number:
-                                 prs = ParseSMS(sms_str)
-                                 if len(prs) > 0:
-                                     msg_on_web_serv(number_str + "**" + prs)
-                             break
+    mqttc = mosquitto.Mosquitto()
+    # mqttc.on_message = on_message
+    # mqttc.on_connect = on_connect
+    # mqttc.on_publish = on_publish
+    # mqttc.on_subscribe = on_subscribe
+    # mqttc.subscribe([(list[0][1], 0), (list[1][1], 0), (list[2][1], 0), (list[3][1], 0), (list[4][1], 0)])
+    # mqttc.loop_start()
+    phonelist = []
+    phonelist = sms_storage.readphones_from_file()
+    if len(phonelist) == 0:
+        msg_on_web_serv('Phonelist wrong...')
+        exit()
+    smsArr = sms_storage.readAllSms()
+    if len(smsArr) > 0:
+        mqttc.connect("localhost", 1883, 60)
+        for sms_elem in smsArr:
+            sms_str = sms_elem.get('message')
+            number_str = sms_storage.UserPhone.FormatNumber(sms_elem.get('number'))
+            if sms_str is not None and number_str is not None:
+                for users in phonelist:
+                    if number_str in users.number:
 
-
-
-
+                        prs = ParseSMS(sms_str)
+                        if len(prs) > 0:
+                            msg_on_web_serv(number_str + "**" + prs)
+                        break

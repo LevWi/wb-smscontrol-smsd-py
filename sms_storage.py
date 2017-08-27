@@ -66,20 +66,41 @@ def readAllSms():
 #     f.write(message)
 #     f.close()
 
-#Небольшое изменение для учета микросекунд в имени файла
-def sendSms(message, tel):
+# MAX_SMS_LENGTH = 70
+# def sendSms(message, number):
+#      numsms=0
+#      if len(message)> MAX_SMS_LENGTH:
+#          mess = u''
+#          for part in message.split(u'\n'):
+#              if len(mess)+len(part) > MAX_SMS_LENGTH:
+#                  _send_(mess, number, numsms)
+#                  numsms +=1
+#                  message = message.replace(mess, u'', 1)
+#                  mess = part
+#              else:
+#                  mess = mess + u'\n' + part
+#      _send_(message, number, numsms)
+
+ # def sendSms(message, number):
+ #     num = len(message)
+ #     numparts= num//MAX_SMS_LENGTH + 1 if num % MAX_SMS_LENGTH > 0 else 0
+ #     for i in range(numparts):
+ #         _send_(message[i*70: (i+1)*70+1], number, i)
+
+
+def sendSms(message, tel, part=0):
     tm = datetime.datetime.now()
     if type(message) is not unicode:
         message = message.decode('utf-8')
     message = message.encode('utf-16')
-    namefile = 'OUT{}{:02d}{:02d}_{:02d}{:02d}{:02d}_{}_{}_sms0.txt'.format(tm.year,
+    namefile = 'OUT{}{:02d}{:02d}_{:02d}{:02d}{:02d}_00_{}_sms{}.txt'.format(tm.year,
                                                                             tm.month,
                                                                             tm.day,
                                                                             tm.hour,
                                                                             tm.minute,
                                                                             tm.second,
-                                                                            '{}'.format(tm.microsecond)[0:2],
-                                                                            tel
+                                                                            tel,
+                                                                            part
                                                                             )
     f = open(OUTBOX_PATH + namefile, 'w')
     f.write(message)

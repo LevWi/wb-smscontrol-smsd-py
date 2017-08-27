@@ -6,7 +6,7 @@ import mosquitto
 import serial
 import modbus_tk
 from modbus_tk import modbus_rtu
-
+import datetime
 import process_signals
 import ser_port_worker
 import sms_storage
@@ -14,14 +14,14 @@ import sms_storage
 #logger = modbus_tk.utils.create_logger(name="console", record_format="%(message)s")
 
 #Инициализация для wirenboard 5
-rs485_mdbPort = modbus_rtu.RtuMaster(serial.Serial('/dev/ttyAPP2', baudrate=9600, parity = serial.PARITY_NONE , stopbits = serial.STOPBITS_ONE , timeout=1.5))
-#master.set_timeout(1.3)
+rs485_mdbPort = modbus_rtu.RtuMaster(serial.Serial('/dev/ttyAPP2', baudrate=9600, parity = serial.PARITY_NONE , stopbits = serial.STOPBITS_ONE ))
+rs485_mdbPort.set_timeout(1.3)
 rs485_mdbPort.set_verbose(True)
 
 process_signals.dev_PLC.portMaster = rs485_mdbPort
 process_signals.dev_VentSystem.portMaster = rs485_mdbPort
 
-ser_port_thread = ser_port_worker.SerialPortThread(0.2)
+ser_port_thread = ser_port_worker.SerialPortThread()
 
 #=================================================
 # Конфигурирование опроса по Modbus
@@ -92,7 +92,7 @@ class TON(object):
     def OUT(self):
         if self._inWork:
             self._inWork = time.time() - self._startTime < self.interval
-        return not self._inWork and self.iter <= self.itercount
+        return not self._inWork and (self.itercount is None or self.iter <= self.itercount)
 
 #Блокирующие таймеры
 #Нужно немного выждать опрос всех устройств, прежде чем отправить ответ пользователю
@@ -100,8 +100,9 @@ sendSMSAnswerBanTON = TON(5)
 
 def on_message(mosq, obj, msg):
     for sign in process_signals.Signals.group:
+        print('New message from mqtt : {} {}'.format(msg.topic, msg.payload))
         if msg.topic == sign.mqttlink:
-            if sign is process_signals.sig_ReceivedSMS and len(msg.payload) > 0:
+            if sign is process_signals.sig_ReceivedSMS:
                 process_signals.sig_ReceivedSMS.data = msg.payload
             elif sign.canModbusWork:
                 #Формируем команду для Modbus устройства
@@ -111,8 +112,12 @@ def on_message(mosq, obj, msg):
                     sendSMSAnswerBanTON.restart()
 
 
+def on_subscribe(mosq, obj, mid, granted_qos):
+    print("Subscribed: "+str(mid)+" "+str(granted_qos))
+
 mqttc = mosquitto.Mosquitto()
 mqttc.on_message = on_message
+mqttc.on_subscribe = on_subscribe
 mqttc.connect("localhost", 1883, 60)
 
 #подписываемся к сигналам
@@ -128,31 +133,32 @@ def createSmsAnswer():
     '''
     smsAnswer = ''
     reg = process_signals.sig_PLC_Alarms.data
-    if not process_signals.dev_PLC.lostDev :
+    if not process_signals.dev_PLC.lostDev:
         if reg is not None :
-            smsAnswer += 'Аварии:\n '
+            smsAnswer += u'Аварии:\n'
             if reg & 1 == 1:
-                smsAnswer += "-Нет основного питания\n "
+                smsAnswer += u"-Нет основного питания\n"
             if reg & 0b10 > 0 :
-                smsAnswer += "-Ошибка датчика котельного контура\n "
+                smsAnswer += u"-Ошибка датчика котельного контура\n"
             if reg & 0b100 > 0 :
-                smsAnswer += "-Ошибка датчика контура отопления\n "
+                smsAnswer += u"-Ошибка датчика контура отопления\n"
             if reg & 0b1000 > 0 :
-                smsAnswer += "-Ошибка датчика внутренней температуры\n "
+                smsAnswer += u"-Ошибка датчика внутренней температуры\n"
             if reg & 0b1000 > 0 :
-                smsAnswer += "-Ошибка датчика давления\n "
+                smsAnswer += u"-Ошибка датчика давления\n"
         for sign in process_signals.Signals.group:
             if isinstance(sign, process_signals.Signals):
-                if sign is not process_signals.sig_VentSpeed and sign.smsNameOut is not None:
-                    smsAnswer += '{} : {}\n '.format(sign.smsNameOut, sign.smsOutData)
+                if sign is not process_signals.sig_VentSpeed and sign.smsNameOut is not None and len(sign.smsNameOut):
+                    #print('types {} {} - {}'.format(type(sign.smsNameOut) , type(sign.smsOutData), sign.name))
+                    smsAnswer += u'{} : {}\n '.format(sign.smsNameOut, sign.smsOutData)
     else:
-        smsAnswer += 'Ошибка связи с ПЛК\n '
+        smsAnswer += u'Ошибка связи с ПЛК\n '
 
     if not process_signals.dev_VentSystem.lostDev :
-        sign = process_signals.sig_VentSpeed
-        smsAnswer += '{} : {}\n '.format(sign.smsNameOut, sign.smsOutData)
+        sign1 = process_signals.sig_VentSpeed
+        smsAnswer += u'{} : {}\n '.format(sign1.smsNameOut, sign1.smsOutData)
     else:
-        smsAnswer += 'Ошибка связи с вентустановкой\n '
+        smsAnswer += u'Ошибка связи с вентустановкой\n'
     return smsAnswer
 
 # Для переодического уведомления
@@ -192,35 +198,43 @@ class Alarm(object):
         if isinstance(self._ton, TON):
             self._ton.restart(restartIter=True)
 
+#Градус цельсия значок не отображается
 alarmTempBoilersLine = Alarm(
     lambda: process_signals.sig_TempBoilersLine.data >= 87.5 ,
-    lambda: '!!Внимание!! \nКритическая температура котлового контура: {}\xe2\x84\x83\n'
+    lambda: '!!Внимание!! \nКритическая температура котлового контура: {}\xe2\x84\x83\n'.decode('utf8')
             .format(process_signals.sig_TempBoilersLine.data),
     TON(60*30, 3)
 )
 
 alarmIndoorTemp = Alarm(
     lambda: -50 < process_signals.sig_TempIndoor.data < 6,
-    lambda: '!!Внимание!! \nНизкая температура помещения:: {}\xe2\x84\x83\n'
-            .format(process_signals.sig_TempIndoor.data),
+    lambda: ('!!Внимание!! \nНизкая температура помещения:: {}\xe2\x84\x83\n'.decode('utf8')
+             .format(process_signals.sig_TempIndoor.data)),
     TON(60*30, 3)
 )
+
 
 
 #чтобы избежать конфликтов с именем файлами замедлим создание
 # sms файлов
 def sendSMSwithInterval(message, number):
     sms_storage.sendSms(message, number)
-    time.sleep(0.01)
+    time.sleep(1.1)
 
 #Публикация неуправляющих переменных
 def publicSignal(signal):
     assert isinstance(signal, process_signals.Signals)
-    print('Public message: {} = {}'.format(signal.mqttlink , signal.mqttData))
+    print('Public message: {} = {}'.format(signal.mqttlink, signal.mqttData))
     try:
         mqttc.publish(signal.mqttlink, signal.mqttData)
     except:
         print 'Error public topic'
+
+# def resetMqttSMScommand():
+#     try:
+#         mqttc.publish(process_signals.sig_ReceivedSMS.mqttlink, '')
+#     except:
+#         print 'Error public topic'
 
 for signal in process_signals.Signals.group:
     assert isinstance(signal, process_signals.Signals)
@@ -234,10 +248,11 @@ if __name__ == "__main__":
     while 1:
         #Отправка SMS после истечения интервала в sendSMSAnswerBanTON при приходе нового события on_message
         if sendSMSAnswerBanTON.OUT:
-            if len(process_signals.sig_ReceivedSMS.data) > 1:
+            if process_signals.sig_ReceivedSMS.data is not None and len(process_signals.sig_ReceivedSMS.data) > 1:
                 number, smsCommand = None, None
                 try:
                     number, smsCommand = process_signals.sig_ReceivedSMS.data.split('**', 1)
+                    print('Message readed {} - {}'.format(number, smsCommand))
                 except ValueError:
                     print('WrongFormat for "sig_ReceivedSMS.data" , value = {}'
                           .format(process_signals.sig_ReceivedSMS.data))
@@ -248,7 +263,7 @@ if __name__ == "__main__":
                         message = createSmsAnswer()
                         sendSMSwithInterval(message, number)
                     elif smsCommand == 'bad_format':
-                        sendSMSwithInterval('Неверный формат сообщения', number)
+                        sendSMSwithInterval(u'Неверный формат сообщения', number)
                 process_signals.sig_ReceivedSMS.data = ''
         #Рассылка SMS по авариям
         for al in [alarmIndoorTemp, alarmTempBoilersLine]:
@@ -259,4 +274,7 @@ if __name__ == "__main__":
                     if 'admin' in user.rights:
                         sendSMSwithInterval(al.message, user.fullnumber)
                         al.blockAlarm()
+        if not ser_port_thread.isAlive():
+            print 'restart modbus thread'
+            ser_port_thread.start()
         time.sleep(0.05)

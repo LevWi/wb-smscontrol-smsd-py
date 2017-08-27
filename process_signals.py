@@ -34,6 +34,7 @@ class Signals(object):
         self.mqttlink = str(ToUnicodeAll(additional.get('mqttlink')))
         self.smsNameIn = ToUnicodeAll(additional.get('smsNameIn'))
         self.smsNameOut = ToUnicodeAll(additional.get('smsNameOut'))
+        self.convertFunc = additional.get('convertFunc')
         mdbAddr_ = additional.get('mdbAddr')
         self.mdbDev = mdbdev
         self.mdbAddr = None if mdbAddr_ == None else int(mdbAddr_)
@@ -94,10 +95,10 @@ class Signals(object):
     @property
     def smsOutData(self):
         if self.data is None:
-            return 'н/д'
+            return u'н/д'
         if self.type == 'bool':
-                return 'вкл' if self.data else 'выкл'
-        return str(ToUnicodeAll(self.data))
+                return u'вкл' if self.data else u'выкл'
+        return ToUnicodeAll(self.data)
 
     @property
     def canModbusWork(self):
@@ -121,6 +122,10 @@ class Signals(object):
         obj = Signals(name, type, mdbDev,  **additional)
         Signals.group.append(obj)
         return obj
+
+#Преобразование числа к дополнительному коду опредленной длины
+def twos_complement_convert(val , size=16):
+    return ~(val ^ int('F' * (size / 4), 16)) if val >> size-1 else val
 
 
 def isSmsNamesMatches(str1, names):
@@ -180,16 +185,16 @@ class MdbDevice(object) :
         assert isinstance(sign, Signals)
         new_data_ = self.ReadReg(sign.mdbAddr)
         if new_data_ is not None:
-                    sign.data = new_data_
+                    sign.data = new_data_ if not callable(sign.convertFunc) else sign.convertFunc(new_data_)
 
     def WrtReg(self, reg, newval):
         if self._canConnect() and self.portMaster is not None:
                 try:
                     self.portMaster.execute(self.addr, mdef.WRITE_SINGLE_REGISTER, reg, output_value=newval)
-                    self._lostDev = False
+                    self.lostDev = False
                     return 0
                 except:
-                    self._lostDev = True
+                    self.lostDev = True
                     return -1
         return -2
 
@@ -197,10 +202,10 @@ class MdbDevice(object) :
         if self._canConnect() and self.portMaster is not None:
             try:
                 rg = self.portMaster.execute(self.addr, mdef.READ_HOLDING_REGISTERS, reg, 1)[0]
-                self._lostDev = False
+                self.lostDev = False
                 return rg
             except:
-                self._lostDev = True
+                self.lostDev = True
                 return None
         return None
     @property
@@ -218,23 +223,27 @@ class MdbDevice(object) :
 dev_PLC = MdbDevice(1)
 dev_VentSystem = MdbDevice(2)
 
+RATIO_INT = 0.1
+def word_to_int(val):
+    return twos_complement_convert(val, 16) * RATIO_INT
+
+
 sig_DiselBoilerTrigOn = Signals.NewSignalToGroup(
     "DiselBoilerTrigOn",
      "bool",
      dev_PLC,
-     mqttlink="/devices/Boilers/Disel/controls/trigOn",
+     mqttlink="/devices/mdb/Boilers/Disel/controls/trigOn",
      mdbAddr=350,
      smsNameIn=[u"Disel", u'дизель', 'диз', 'дизельный котел', 'дизельный']
      #smsNameOut="Дизельный котел"
                                                  )
-
-
 sig_PressureBoilersLine = Signals.NewSignalToGroup(
     "PressureBoilersLine",
     "float",
     dev_PLC,
-    mqttlink="/devices/Sensors/controls/PressureBoilersLine",
+    mqttlink="/devices/mdb/Sensors/controls/PressureBoilersLine",
     mdbAddr=434,
+    convertFunc=word_to_int,
     smsNameOut="Давление в котлах"
                                 )
 
@@ -242,8 +251,9 @@ sig_TempBoilersLine = Signals.NewSignalToGroup(
     "TempBoilersLine",
     "float",
     dev_PLC,
-    mqttlink="/devices/Sensors/controls/TempBoilersLine" ,
+    mqttlink="/devices/mdb/Sensors/controls/TempBoilersLine" ,
     mdbAddr=428,
+    convertFunc=word_to_int,
     smsNameOut=u"Температура котлов"
                                           )
 
@@ -251,8 +261,9 @@ sig_TempHeatingLine = Signals.NewSignalToGroup(
     "TempHeatingLine",
     "float",
     dev_PLC,
-    mqttlink="/devices/Sensors/controls/TempHeatingLine",
+    mqttlink="/devices/mdb/Sensors/controls/TempHeatingLine",
     mdbAddr=430,
+    convertFunc=word_to_int,
     smsNameOut=u"Температура отопления"
                                           )
 
@@ -260,9 +271,10 @@ sig_TempIndoor = Signals.NewSignalToGroup(
     "TempIndoor",
     "float",
     dev_PLC,
-    mqttlink="/devices/Sensors/controls/TempIndoor",
+    mqttlink="/devices/mdb/Sensors/controls/TempIndoor",
     mdbAddr=432,
-    smsNameOut=u"Температура помещения"
+    convertFunc=word_to_int,
+    smsNameOut="Температура помещения"
                                           )
 
 sig_IndoorTempSet = Signals.NewSignalToGroup(
@@ -270,7 +282,7 @@ sig_IndoorTempSet = Signals.NewSignalToGroup(
     "int",
     dev_PLC,
     min=0, max=50,
-    mqttlink="/devices/Boilers/controls/TempSet",
+    mqttlink="/devices/mdb/Boilers/controls/TempSet",
     mdbAddr=335,
     smsNameIn=[u"Uctavka", 'уставка'],
     smsNameOut=u"Уставка помещения"
@@ -279,7 +291,7 @@ sig_PresenceMode = Signals.NewSignalToGroup(
     "PresenceMode",
     "bool",
     dev_PLC,
-    mqttlink="/devices/Boilers/controls/PresenceMode",
+    mqttlink="/devices/mdb/Boilers/controls/PresenceMode",
     mdbAddr=337,
     smsNameIn=[u"InHome", u'присутствие', 'дома', 'в доме', 'внутри'],
     smsNameOut=u"Режим присутствия"
@@ -290,7 +302,7 @@ sig_PLC_VentPump = Signals.NewSignalToGroup(
     "int",
     dev_PLC,
     min=0, max=1,
-    mqttlink="/devices/Ventilation/controls/VentPump",
+    mqttlink="/devices/mdb/Ventilation/controls/VentPump",
     mdbAddr=333,
 )
 
@@ -298,7 +310,7 @@ sig_PLC_Alarms = Signals.NewSignalToGroup(
     "PLC_Alarms",
     "int",
     dev_PLC,
-    mqttlink="/devices/PLC/controls/Alarms",
+    mqttlink="/devices/mdb/PLC/controls/Alarms",
     mdbAddr=341
 )
 
@@ -306,7 +318,7 @@ sig_PLC_DInputs = Signals.NewSignalToGroup(
     "PLC_DInputs",
     "int",
     dev_PLC,
-    mqttlink="/devices/PLC/controls/DInputs",
+    mqttlink="/devices/mdb/PLC/controls/DInputs",
     mdbAddr=288
 )
 
@@ -315,7 +327,7 @@ sig_VentSpeed = Signals.NewSignalToGroup(
     "int",
     dev_VentSystem,
     min=0, max=3,
-    mqttlink="/devices/Ventilation/controls/speed",
+    mqttlink="/devices/mdb/Ventilation/controls/speed",
     mdbAddr=100,
     smsNameIn=[u"Vent", 'вентиляция', 'вент'],
     smsNameOut=u"Скор. вентиляции"
@@ -326,7 +338,7 @@ sig_VentHeaterType = Signals.NewSignalToGroup(
     "int",
     dev_VentSystem,
     min=0, max=3,
-    mqttlink="/devices/Ventilation/controls/heaterType",
+    mqttlink="/devices/mdb/Ventilation/controls/heaterType",
     mdbAddr=200
 )
 
@@ -334,7 +346,7 @@ sig_PelletBoilerTrigOn = Signals.NewSignalToGroup(
     "PelletBoilerTrigOn",
     "bool",
     dev_PLC,
-    mqttlink="/devices/Boilers/Pellet/controls/trigOn",
+    mqttlink="/devices/mdb/Boilers/Pellet/controls/trigOn",
     mdbAddr=351,
     smsNameIn=[u"Pellet", 'дров', 'пеллетный котел', 'пеллет']
     #smsNameOut="Пелетный котел"
@@ -343,7 +355,7 @@ sig_BoilersTrigOff = Signals.NewSignalToGroup(
     "BoilersTrigOff",
     "bool",
     dev_PLC,
-    mqttlink="/devices/Boilers/controls/trigAllOff",
+    mqttlink="/devices/mdb/Boilers/controls/trigAllOff",
     mdbAddr=352,
     smsNameIn=u"BoilersStop"
                                                 )
@@ -365,8 +377,10 @@ sig_ReceivedSMS = Signals.NewSignalToGroup(
     "Received SMS",
     "str",
     None,
-    mqttlink="/devices/Modem/controls/ReceivedSMS"
+    mqttlink="/devices/mdb/Modem/controls/ReceivedSMS"
 )
+
+
 
 # sig_Alarms = Signals.NewSignalToGroup(
 #     "Alarms",
