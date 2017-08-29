@@ -1,10 +1,16 @@
 # coding=utf-8
 #  !/usr/bin/env python
 
+import logging.handlers
+import logging
 import mosquitto
-
 import process_signals as signalsDB
 import sms_storage
+
+module_logger = logging.getLogger("received_sms")
+module_logger.setLevel(logging.DEBUG)
+handler1 = logging.handlers.RotatingFileHandler('/mnt/tmpfs-spool/gammu/received_sms_log.txt', maxBytes=100000, backupCount=0)
+module_logger.addHandler(handler1)
 
 
 def is_number(str):
@@ -57,29 +63,6 @@ def ParseSMS(stri):
     if stri == 'status':
         # mqttc.publish(signalsDB.sig_ReceivedSMS.mqttlink, 'STATUS_NEED')
         return 'status_need'
-        '''
-        if (devices.Alarms[2].find('loVen') >= 0):
-            answer += 'HET Ventilyac\n'
-        else:
-            answer += '{} = {}\n'.format(devices.VentStaRead[0], devices.VentStaRead[2])
-        if (devices.Alarms[2].find('loPLC') >= 0):
-            answer += 'HET PLC\n'
-        else:
-            if (devices.Alarms[2].find('LostPWR') >= 0):
-                answer += 'HET PITANIA\n'
-            if (devices.Alarms[2].find('SenBrk') >= 0):
-                answer += 'Obryv Datchik\n'
-            else:
-                answer += '{} = {}\n'.format(devices.TempSensor[0], devices.TempSensor[2])
-                answer += '{} = {}\n'.format(devices.BoilerTempSet[0], devices.BoilerTempSet[2])
-            if (devices.Alarms[2].find('PmpAL1') >= 0) and (devices.Alarms[2].find('PmpAL2') >= 0):
-                answer += 'Avar Nasos1+2\n'
-            elif (devices.Alarms[2].find('PmpAL2') >= 0):
-                answer += 'Avar Nasos2\n'
-            elif (devices.Alarms[2].find('PmpAL1') >= 0):
-                answer += 'Avar Nasos1\n'
-        '''
-        return answer
     commands = stri.strip(', ').replace('\n', '')
     commands = commands.split(',')
     for command in commands:
@@ -97,6 +80,7 @@ def ParseSMS(stri):
                     answer = 'refresh_data'
                     break
                 except:
+                    module_logger.warning("Error read SMS")
                     return 'bad_format'
                     # if dev.type == "int":
                     #     if elems[1].isdigit():
@@ -117,15 +101,15 @@ def ParseSMS(stri):
 
 
 def msg_on_web_serv(msg):
-    print('public SMS message = ' + msg)
-    mqttc.publish(signalsDB.sig_ReceivedSMS.mqttlink, msg)
+    module_logger.debug('public SMS message = ' + msg)
+    public_topic_on_web_serv(signalsDB.sig_ReceivedSMS.mqttlink, msg)
 
 
 def public_topic_on_web_serv(mqttlink, topic):
     try:
         mqttc.publish(mqttlink, topic)
     except:
-        print 'Error public topic'
+        module_logger.exception('Error public topic')
 
 
 if __name__ == "__main__":
@@ -139,7 +123,7 @@ if __name__ == "__main__":
     phonelist = []
     phonelist = sms_storage.readphones_from_file()
     if len(phonelist) == 0:
-        msg_on_web_serv('Phonelist wrong...')
+        module_logger.error('Phonelist wrong...')
         exit()
     smsArr = sms_storage.readAllSms()
     if len(smsArr) > 0:

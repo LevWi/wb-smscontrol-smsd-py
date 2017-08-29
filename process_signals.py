@@ -1,8 +1,8 @@
 # coding=utf-8
 ##############
 
+import logging
 import time
-
 import modbus_tk.defines as mdef
 
 """
@@ -14,6 +14,9 @@ smsNameIn
 smsNameOut
 mdbAddr
 """
+
+module_logger = logging.getLogger(__name__)
+module_logger.setLevel(logging.WARNING)
 
 class Signals(object):
     group = []
@@ -71,23 +74,23 @@ class Signals(object):
             try:
                 return self.limit(int(value))
             except:
-                print('Error in convertDataForModbus() for data {}'.format(value))
+                module_logger.exception('Error in convertDataForModbus() for data {}'.format(value))
 
     def ReadSignalFromDev(self):
         if self.canModbusWork:
             self.mdbDev.ReadSignalFromDev(self)
             if not self.mdbDev.lostDev:
-                print('<-- read from device {} = {}'.format(self.name, self.data))
+                module_logger.debug('<-- read from device {} = {}'.format(self.name, self.data))
                 return self.data
         return None
 
     def wrtSignalToDev(self, newVal, refreshSignal = False):
         if self.canModbusWork:
-            print('--> try to write command {} = {}'.format(self.name, newVal))
+            module_logger.debug('--> try to write command {} = {}'.format(self.name, newVal))
             self.mdbDev.wrtSignalToDev(self, newVal, refreshSignal)
             if not self.mdbDev.lostDev:
                 return self.data
-        print('xx--> error to write command {} = {}'.format(self.name, newVal))
+        module_logger.warning('xx--> error to write command {} = {}'.format(self.name, newVal))
         return None
 
     @property

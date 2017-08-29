@@ -1,6 +1,5 @@
 # coding=utf-8
-
-
+import logging
 import Queue
 import threading
 import time
@@ -14,6 +13,9 @@ import process_signals
 Завязка на работу с mqtt сервером
 '''
 
+module_logger = logging.getLogger(__name__)
+module_logger.setLevel(logging.DEBUG)
+#module_logger.addHandler(wb_logging.handler)
 
 class SerialPortThread(threading.Thread):
     def __init__(self, periodCicle=0):
@@ -34,6 +36,7 @@ class SerialPortThread(threading.Thread):
     def run(self):
         self.__canWork = True
         index = 0
+        module_logger.debug('SerialPortThread started....')
         while self.__canWork:
             if not self.queueWrite.empty():
                 act = self.queueWrite.get()

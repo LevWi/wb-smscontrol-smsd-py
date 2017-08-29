@@ -1,7 +1,7 @@
 # coding=utf-8
 
 # For gammu smsd demon
-
+import logging
 import datetime
 import json
 import os
@@ -15,8 +15,11 @@ SENT_PATH = '/mnt/tmpfs-spool/gammu/sent/'
 PHONE_LIST = '/home/phones.txt'
 
 # Какой тип SMS будет посылаться устройством
-SEND_FALSH_SMS = True
+SEND_FALSH_SMS = False
 
+module_logger = logging.getLogger(__name__)
+module_logger.setLevel(logging.DEBUG)
+#module_logger.addHandler(wb_logging.handler)
 
 def filePath(path):
     return path if path.endswith('/') else path + '/'
@@ -25,7 +28,10 @@ def filePath(path):
 def dellAllFilesInDir(dirPath):
     for fileName in os.listdir(dirPath):
         flPth = filePath(dirPath) + fileName
-        os.remove(flPth)
+        try:
+            os.remove(flPth)
+        except:
+            module_logger.exception('Error deleting file: ' + flPth)
 
 
 def cleanSentPath():
@@ -44,7 +50,7 @@ def readAllSms():
                 message = f.read().decode('utf-16')
                 arr.append(dict(number=number, message=message))
             except:
-                print('Wrong message file {}'.format(fileName))
+                module_logger.exception('Wrong message file {}'.format(fileName))
         f.close()
         os.remove(flPth)
     cleanSentPath()
@@ -53,6 +59,7 @@ def readAllSms():
 
 
 def sendSms(message, tel, flashSMS=SEND_FALSH_SMS):
+    module_logger.debug("Sending SMS to %s", tel)
     tm = datetime.datetime.now()
     if type(message) is not unicode:
         message = message.decode('utf-8')
@@ -117,6 +124,6 @@ def readphones_from_file():
                 new_phone = UserPhone.CreateFromDict(element, True)
                 usersphones.append(new_phone)
         except:
-            print("Error riding phone : {}".format(element))
+            module_logger.exception("Error reading phone : {}".format(element))
     print 'Phone List : {}'.format(usersphones)
     return usersphones

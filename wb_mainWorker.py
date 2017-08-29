@@ -1,5 +1,6 @@
 # coding=utf-8
 
+import logging, logging.handlers
 import time
 import threading
 import mosquitto
@@ -12,6 +13,19 @@ import ser_port_worker
 import sms_storage
 
 # logger = modbus_tk.utils.create_logger(name="console", record_format="%(message)s")
+#logging.basicConfig(level=logging.DEBUG)
+locLogger = logging.getLogger(__name__)
+locLogger.setLevel(logging.DEBUG)
+
+handler1 = logging.handlers.RotatingFileHandler('/mnt/tmpfs-spool/gammu/sms_mdb_log.txt', maxBytes=100000, backupCount=2)
+formatter1 = logging.Formatter('%(name)s        %(levelname)s        %(message)s')
+handler1.setFormatter(formatter1)
+handler1.setLevel(logging.DEBUG)
+
+locLogger.addHandler(handler1)
+process_signals.module_logger.addHandler(handler1)
+sms_storage.module_logger.addHandler(handler1)
+
 
 # Инициализация для wirenboard 5
 rs485_mdbPort = modbus_rtu.RtuMaster(
@@ -24,8 +38,14 @@ process_signals.dev_VentSystem.portMaster = rs485_mdbPort
 
 
 # =================================================
+
+def waiting_findDevice():
+    if process_signals.dev_PLC.lostDev and process_signals.dev_VentSystem.lostDev:
+        locLogger.warning("LOST ALL DEVICE : CHECK CONNECTION!!")
+        time.sleep(5)
+        return
+
 # Конфигурирование опроса по Modbus
-#
 # проверка калорифера
 def checkHeaterType():
     heaterType = process_signals.sig_VentHeaterType.ReadSignalFromDev()
@@ -69,7 +89,7 @@ ser_port_thread = ser_port_worker.SerialPortThread()
 def restart_modbusWork():
     global ser_port_thread
     ser_port_thread = ser_port_worker.SerialPortThread()
-    ser_port_thread.listSignCycleRead = [checkHeaterType, readAlarms] + \
+    ser_port_thread.listSignCycleRead = [checkHeaterType, readAlarms, waiting_findDevice] + \
                                         [sign for sign in process_signals.Signals.group if sign.canModbusWork]
     ser_port_thread.start()
 
@@ -95,6 +115,11 @@ class TON(object):
         if restartIter and self.itercount is not None:
             self.iter = 0
 
+    def clearTimer(self):
+        self._inWork = False
+        if self.itercount is not None:
+            self.iter = 0
+
     @property
     def OUT(self):
         if self._inWork:
@@ -109,7 +134,7 @@ sendSMSAnswerBanTON = TON(5)
 
 def on_message(mosq, obj, msg):
     if msg.topic in process_signals.sig_ReceivedSMS.mqttlink:
-        print('New message from mqtt : {} {}'.format(msg.topic, msg.payload))
+        locLogger.debug('New message from mqtt : {} {}'.format(msg.topic, msg.payload))
         process_signals.sig_ReceivedSMS.data = msg.payload
         return
     for sign in process_signals.Signals.group:
@@ -117,7 +142,7 @@ def on_message(mosq, obj, msg):
             # Формируем команду для Modbus устройства
             newdata = sign.convertDataForModbus(msg.payload)
             if newdata is not None:
-                print('New message from mqtt : {} {} '.format(msg.topic, msg.payload))
+                locLogger.debug('New message from mqtt : {} {} '.format(msg.topic, msg.payload))
                 if ser_port_thread.isAlive():
                     ser_port_thread.sendToQueue([sign.wrtSignalToDev, (newdata, True)])
                 sendSMSAnswerBanTON.restart()
@@ -188,7 +213,7 @@ class Alarm(object):
     def readcondition(self):
         res = self.condition()
         if not res and isinstance(self._ton, TON):
-            self.restartTimer()
+            self.clearTimer()
         self.conditionOld = res
         return res
 
@@ -210,9 +235,9 @@ class Alarm(object):
         if isinstance(self._ton, TON):
             self._ton.restart()
 
-    def restartTimer(self):
+    def clearTimer(self):
         if isinstance(self._ton, TON):
-            self._ton.restart(restartIter=True)
+            self._ton.clearTimer()
 
 
 alarmTempBoilersLine = Alarm(
@@ -228,7 +253,7 @@ alarmIndoorTemp = Alarm(
     TON(60 * 30, 3)
 )
 alarmLostPower = Alarm(
-    lambda: process_signals.sig_PLC_Alarms.data > 0 and (process_signals.sig_PLC_Alarms.data & 1) == 1,
+    lambda: process_signals.sig_PLC_Alarms.data is not None and (process_signals.sig_PLC_Alarms.data & 1) == 1,
     lambda: '!!Внимание!!\nПотеря основного питания'.decode('utf8'),
     TON(60 * 30, 3)
 )
@@ -244,11 +269,11 @@ def sendSMSwithInterval(message, number):
 # Публикация неуправляющих переменных
 def publicSignal(signal):
     assert isinstance(signal, process_signals.Signals)
-    print('Public message: {} = {}'.format(signal.mqttlink, signal.mqttData))
+    locLogger.debug('Public message: {} = {}'.format(signal.mqttlink, signal.mqttData))
     try:
         mqttc.publish(signal.mqttlink, signal.mqttData)
     except:
-        print 'Error public topic'
+        locLogger.exception('Error public topic')
 
 
 for signal in process_signals.Signals.group:
@@ -268,10 +293,10 @@ def smsSenderLoop():
                 number, smsCommand = None, None
                 try:
                     number, smsCommand = process_signals.sig_ReceivedSMS.data.split('**', 1)
-                    print('Message readed {} - {}'.format(number, smsCommand))
+                    locLogger.debug('Message readed {} - {}'.format(number, smsCommand))
                 except ValueError:
-                    print('WrongFormat for "sig_ReceivedSMS.data" , value = {}'
-                          .format(process_signals.sig_ReceivedSMS.data))
+                    locLogger.exception('WrongFormat for "sig_ReceivedSMS.data" , value = {}'
+                                      .format(process_signals.sig_ReceivedSMS.data))
                 if number is not None:
                     if len(number) == 10:
                         number = '+7' + number
@@ -288,6 +313,7 @@ def smsSenderLoop():
                 for user in phonelist:
                     assert isinstance(user, sms_storage.UserPhone)
                     if 'admin' in user.rights:
+                        locLogger.debug("Send Alarm message to %s", user.fullnumber)
                         sendSMSwithInterval(al.messageStr, user.fullnumber)
                         al.blockAlarm()
         time.sleep(0.05)
@@ -303,10 +329,10 @@ if __name__ == "__main__":
     mqttc.loop_start()
     while 1:
         if not ser_port_thread.isAlive():
-            print 'restart modbus thread'
+            locLogger.warning('restart modbus thread')
             restart_modbusWork()
         if not smsThread.isAlive():
-            print 'restart sms thread'
+            locLogger.warning('restart sms thread')
             restartSmsSenderLoop()
         time.sleep(5)
 
