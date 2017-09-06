@@ -50,7 +50,7 @@ def waiting_findDevice():
 def checkHeaterType():
     heaterType = process_signals.sig_VentHeaterType.ReadSignalFromDev()
     NowspeedFanState = process_signals.sig_VentSpeed.data
-    boiler_on_flag = process_signals.sig_DiselBoilerOn.data or process_signals.sig_PelletBoilerOn
+    boiler_on_flag = process_signals.sig_DiselBoilerOn.data or process_signals.sig_PelletBoilerOn.data
     process_signals.sig_PLC_VentPump.wrtSignalToDev((heaterType == 1) and NowspeedFanState > 0 and boiler_on_flag)
 
 
@@ -175,7 +175,8 @@ def createSmsAnswer():
     reg = process_signals.sig_PLC_Alarms.data
     if not process_signals.dev_PLC.lostDev:
         if reg is not None:
-            smsAnswer += u'Аварии:\n'
+            if reg > 0:
+                smsAnswer += u'Аварии:\n'
             if reg & 1 == 1:
                 smsAnswer += u"-Нет основного питания\n"
             if reg & 0b10 > 0:

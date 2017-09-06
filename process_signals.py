@@ -370,7 +370,7 @@ sig_BoilersTrigOff = Signals.NewSignalToGroup(
     dev_PLC,
     mqttlink="/devices/mdb/Boilers/controls/trigAllOff",
     mdbAddr=352,
-    smsNameIn=u"BoilersStop"
+    smsNameIn=[u"BoilersStop", 'котлы стоп', 'boilers stop']
                                                 )
 sig_DiselBoilerOn = Signals.NewSignalToGroup(
     "DiselBoilerOn",
