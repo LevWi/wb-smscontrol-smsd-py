@@ -306,8 +306,8 @@ sig_PresenceMode = Signals.NewSignalToGroup(
     dev_PLC,
     mqttlink="/devices/mdb/Boilers/controls/PresenceMode",
     mdbAddr=337,
-    smsNameIn=[u"InHome", u'присутствие', 'дома', 'в доме', 'внутри'],
-    smsNameOut=u"Режим присутствия"
+    smsNameIn=[u"OutHome", u'отсутствие'],
+    smsNameOut=u"Режим отсутствия"
                                                 )
 
 sig_PLC_VentPump = Signals.NewSignalToGroup(
